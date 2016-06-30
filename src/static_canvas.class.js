@@ -621,6 +621,10 @@
         this.upperCanvasEl[prop] = value;
       }
 
+      if (this.cursorCanvasEl) {
+        this.cursorCanvasEl[prop] = value;
+      }
+      
       if (this.cacheCanvasEl) {
         this.cacheCanvasEl[prop] = value;
       }
@@ -643,6 +647,10 @@
 
       if (this.upperCanvasEl) {
         this.upperCanvasEl.style[prop] = value;
+      }
+
+      if (this.cursorCanvasEl) {
+        this.cursorCanvasEl.style[prop] = value;
       }
 
       if (this.wrapperEl) {

@@ -135,6 +135,10 @@
       this.fire('mouse:out', { target: target, e: e });
       this._hoveredTarget = null;
       target && target.fire('mouseout', { e: e });
+
+      if (this.isDrawingMode) {
+        this.clearContext(this.contextCursor);
+      }
     },
 
     /**
@@ -323,8 +327,10 @@
 
       this.fire('mouse:' + eventType, options);
       target && target.fire('mouse' + eventType, options);
-      for (var i = 0; i < targets.length; i++) {
-        targets[i].fire('mouse' + eventType, options);
+      if (targets) {
+        for (var i = 0; i < targets.length; i++) {
+          targets[i].fire('mouse' + eventType, options);
+        }
       }
     },
 
@@ -344,7 +350,20 @@
       this._restoreOriginXY(target);
 
       if (transform.actionPerformed || (this.stateful && target.hasStateChanged())) {
-        this.fire('object:modified', { target: target });
+        this.fire('object:modified', {
+          target: target,
+          newTop: target.top,
+          newLeft: target.left,
+          newAngle: target.angle,
+          newScaleX: target.scaleX,
+          newScaleY: target.scaleY,
+          oldTop: transform.original.top,
+          oldLeft: transform.original.left,
+          oldAngle: transform.original.angle,
+          oldScaleX: transform.original.scaleX,
+          oldScaleY: transform.original.scaleY,
+          action: transform.action
+        });
         target.fire('modified');
       }
     },
@@ -393,10 +412,15 @@
      * @param {Event} e Event object fired on mousemove
      */
     _onMouseMoveInDrawingMode: function(e) {
-      if (this._isCurrentlyDrawing) {
-        var ivt = fabric.util.invertTransform(this.viewportTransform),
+      if (this._isCurrentlyDrawing || this.freeDrawingBrush.cursorRenderer) {
+        var ivt     = fabric.util.invertTransform(this.viewportTransform),
             pointer = fabric.util.transformPoint(this.getPointer(e, true), ivt);
-        this.freeDrawingBrush.onMouseMove(pointer);
+        if (this._isCurrentlyDrawing) {
+          this.freeDrawingBrush.onMouseMove(pointer);
+        }
+        if (this.freeDrawingBrush.cursorRenderer) {
+          this.freeDrawingBrush.cursorRender(pointer);
+        }
       }
       this.setCursor(this.freeDrawingCursor);
       this._handleEvent(e, 'move');

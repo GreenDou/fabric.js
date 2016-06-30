@@ -15,6 +15,13 @@
     initialize: function(canvas) {
       this.canvas = canvas;
       this._points = [ ];
+
+      //  cursor
+      this.canvas.freeDrawingCursor = 'none';
+      if (fabric.CursorRenderer) {
+        this.cursorRenderer = new fabric.CursorRenderer(this.canvas.cursorCanvasEl, this);
+      }
+
     },
 
     /**
@@ -60,6 +67,10 @@
       this._addPoint(p);
 
       this.canvas.contextTop.moveTo(p.x, p.y);
+
+      if (this.cursorRenderer) {
+        this.cursorRenderer.prepareForRender();
+      }
     },
 
     /**
@@ -214,6 +225,11 @@
 
       // fire event 'path' created
       this.canvas.fire('path:created', { path: path });
+    },
+
+    cursorRender: function cursorRender(pointer) {
+      this.canvas.clearContext(this.canvas.contextCursor);
+      this.cursorRenderer.renderCircle(pointer.x, pointer.y);
     }
   });
 })();

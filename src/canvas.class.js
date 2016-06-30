@@ -47,6 +47,10 @@
       this._initStatic(el, options);
       this._initInteractive();
       this._createCacheCanvas();
+
+      if (fabric.LayerManager) {
+        this.layerManager = new fabric.LayerManager(this);
+      }
     },
 
     /**
@@ -245,6 +249,8 @@
       this._initEventListeners();
 
       this._initRetinaScaling();
+
+      this._createCursorCanvas();
 
       this.freeDrawingBrush = fabric.PencilBrush && new fabric.PencilBrush(this);
 
@@ -1385,14 +1391,177 @@
     },
 
     /**
+     * @private
+     */
+    _createCursorCanvas: function() {
+      this.cursorCanvasEl = this._createCanvasElement();
+
+      this.wrapperEl.appendChild(this.cursorCanvasEl);
+
+      this._copyCanvasStyle(this.lowerCanvasEl, this.cursorCanvasEl);
+      this._applyCanvasStyle(this.cursorCanvasEl);
+      this.cursorCanvasEl.style.pointerEvents = 'none';
+
+      this.contextCursor = this.cursorCanvasEl.getContext('2d');
+    },
+
+    renderAll: function() {
+      var canvasToDrawOn = this.contextContainer, objsToRender;
+
+      if (this.contextTop && this.selection && !this._groupSelector) {
+        this.clearContext(this.contextTop);
+      }
+
+      this.clearContext(canvasToDrawOn);
+
+      this.fire('before:render');
+
+      if (this.clipTo) {
+        fabric.util.clipContext(this, canvasToDrawOn);
+      }
+      this._renderBackground(canvasToDrawOn);
+
+      canvasToDrawOn.save();
+      objsToRender = this._chooseObjectsToRender();
+      //apply viewport transform once for all rendering process
+      canvasToDrawOn.transform.apply(canvasToDrawOn, this.viewportTransform);
+      this._renderObjects(canvasToDrawOn, objsToRender);
+      this.preserveObjectStacking || this._renderObjects(canvasToDrawOn, [this.getActiveGroup()]);
+      canvasToDrawOn.restore();
+
+      if (!this.controlsAboveOverlay && this.interactive) {
+        this.drawControls(canvasToDrawOn);
+      }
+      if (this.clipTo) {
+        canvasToDrawOn.restore();
+      }
+      this._renderOverlay(canvasToDrawOn);
+      if (this.controlsAboveOverlay && this.interactive) {
+        this.drawControls(canvasToDrawOn);
+      }
+
+      this.fire('after:render');
+      return this;
+    },
+
+    /**
      * Clears all contexts (background, main, top) of an instance
      * @return {fabric.Canvas} thisArg
      * @chainable
      */
     clear: function () {
       delete this.lastRenderedWithControls;
-      return this.callSuper('clear');
+      var objects = this._objects.slice();
+      if (this.layerManager) {
+        this.layerManager.clearLayers();
+      }
+      this._objects.length = 0;
+      if (this.discardActiveGroup) {
+        this.discardActiveGroup();
+      }
+      if (this.discardActiveObject) {
+        this.discardActiveObject();
+      }
+      this.clearContext(this.contextContainer);
+      if (this.contextTop) {
+        this.clearContext(this.contextTop);
+      }
+      this.fire('canvas:cleared', {objects: objects});
+      this.renderAll();
+      return this;
+    },
+
+    isBrushType: function(brush, type) {
+      return brush.constructor === type.constructor;
+    },
+
+    setFreeDrawingBrush: function(brush, options) {
+      var myself = this;
+      this.clearContext(this.contextTop);
+      switch (brush) {
+        case 'round':
+          if (this.freeDrawingBrush && this.isBrushType(this.freeDrawingBrush, fabric.RoundBrush)) {
+            this.freeDrawingBrush.setOptions(options);
+          } else {
+            this.freeDrawingBrush = new fabric.RoundBrush(this, options);
+          }
+          break;
+        case 'line':
+          if (this.freeDrawingBrush && this.isBrushType(this.freeDrawingBrush, fabric.LineBrush)) {
+            this.freeDrawingBrush.setOptions(options);
+          } else {
+            this.freeDrawingBrush = new fabric.LineBrush(this, options);
+          }
+          break;
+        case 'rect':
+          if (this.freeDrawingBrush && this.isBrushType(this.freeDrawingBrush, fabric.RectBrush)) {
+            this.freeDrawingBrush.setOptions(options);
+          } else {
+            this.freeDrawingBrush = new fabric.RectBrush(this, options);
+          }
+          break;
+        case 'eraser':
+          if (this.freeDrawingBrush
+            && this.freeDrawingBrush instanceof fabric.EraserBrush) {
+            this.freeDrawingBrush.setOptions(options);
+          } else {
+            this.freeDrawingBrush = new fabric.EraserBrush(this, options);
+          }
+          break;
+        case 'rotate_center':
+          if (this.rotationPoint) {
+            options.point = {
+              x: this.rotationPoint.x,
+              y: this.rotationPoint.y
+            };
+          }
+          if (this.freeDrawingBrush
+            && this.freeDrawingBrush instanceof fabric.PointBrush) {
+            this.freeDrawingBrush.setOptions(options);
+          } else {
+            this.freeDrawingBrush = new fabric.PointBrush(this, function(point) {
+              myself.rotationPoint = {
+                x: point.x,
+                y: point.y
+              };
+            }, options);
+          }
+          if (this.rotationPoint) {
+            this.freeDrawingBrush.renderPoint();
+          }
+          break;
+        default :
+        case 'pencil':
+          if (!(this.freeDrawingBrush
+            && this.isBrushType(this.freeDrawingBrush, fabric.PencilBrush))) {
+            this.freeDrawingBrush = new fabric.PencilBrush(myself);
+          }
+          for (var prop in options) {
+            if (options.hasOwnProperty(prop)) {
+              this.freeDrawingBrush[prop] = options[prop];
+            }
+          }
+      }
+    },
+
+    /**
+     * @param flag
+     */
+    setDrawingMode: function(flag) {
+      if (!this.freeDrawingBrush || this.isDrawingMode === flag) {
+        return;
+      }
+
+      this.clearContext(this.contextTop);
+      if (flag) {
+        this.isDrawingMode = true;
+        this.upperCanvasEl.addEventListener('mouseout', this._onMouseOut);
+      } else {
+        this.isDrawingMode = false;
+        this.upperCanvasEl.removeEventListener('mouseout', this._onMouseOut);
+      }
     }
+
   });
 
   // copying static properties manually to work around Opera's bug,
