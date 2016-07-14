@@ -173,7 +173,7 @@
     /**
      * When true, canvas is scaled by devicePixelRatio for better rendering on retina screens
      */
-    enableRetinaScaling: true,
+    enableRetinaScaling: false,
 
     /**
      * @private
